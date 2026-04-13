@@ -538,10 +538,26 @@ def is_license_expired(license: dict) -> bool:
     return dt.now() > expires
 
 
+def _license_feature_checks_bypassed() -> bool:
+    """
+    When True, is_feature_enabled() returns True for every feature without contacting the license service.
+
+    Defaults to True. Set COPILOT_BYPASS_LICENSE_FEATURE_CHECKS to false, 0, no, or off to enforce
+    real license feature checks.
+    """
+    v = os.getenv("COPILOT_BYPASS_LICENSE_FEATURE_CHECKS", "true").strip().lower()
+    if v in ("0", "false", "no", "off"):
+        return False
+    return True
+
+
 async def is_feature_enabled(feature_name: str, session: AsyncSession, message: str = None) -> bool:
     """
     Check if a feature is enabled in a license.
     Uses cache first, falls back to API if cache miss or expired.
+
+    Unless COPILOT_BYPASS_LICENSE_FEATURE_CHECKS is false/0/no/off, returns True immediately for every
+    feature without contacting the license service (bypass is the default).
 
     Args:
         feature_name (str): The feature name to check.
@@ -551,6 +567,10 @@ async def is_feature_enabled(feature_name: str, session: AsyncSession, message: 
     Returns:
         bool: True if the feature is enabled, False otherwise.
     """
+    if _license_feature_checks_bypassed():
+        logger.debug("License feature check bypassed; treating '%s' as enabled", feature_name)
+        return True
+
     license = await get_license(session)
 
     # Check cache first
